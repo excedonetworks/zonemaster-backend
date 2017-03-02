@@ -1,12 +1,12 @@
 package Zonemaster::WebBackend::Runner;
-our $VERSION = '1.1.0';
+our $VERSION = '1.0.7';
 
 use strict;
 use warnings;
 use 5.14.2;
 
 use DBI qw(:utils);
-use JSON::PP;
+use JSON;
 
 use Net::LDNS;
 
@@ -37,7 +37,12 @@ sub run {
     my @accumulator;
     my %counter;
     my %counter_for_progress_indicator;
-
+    my $domain_already_taken = $self->{db}->is_domain_available( $test_id );
+    if ($domain_already_taken) {
+        return;
+    } else {
+        $self->{db}->add_domain_temp( $test_id );
+    }
     my $params;
 
     my $progress = $self->{db}->test_progress( $test_id, 1 );
@@ -159,7 +164,8 @@ sub run {
     $self->{db}->test_results( $test_id, Zonemaster->logger->json( 'INFO' ) );
 
     $progress = $self->{db}->test_progress( $test_id );
-
+    
+    $self->{db}->delete_domain_temp( $test_id );
     return;
 } ## end sub run
 

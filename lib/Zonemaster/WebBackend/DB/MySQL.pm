@@ -1,6 +1,6 @@
 package Zonemaster::WebBackend::DB::MySQL;
 
-our $VERSION = '1.1.0';
+our $VERSION = '1.0.7';
 
 use Moose;
 use 5.14.2;
@@ -113,7 +113,7 @@ sub create_new_test {
     my $result_id;
 
     eval {
-        $dbh->do( q[LOCK TABLES test_results WRITE] );
+        #$dbh->do( q[LOCK TABLES test_results WRITE] );
         my ( $recent_id, $recent_hash_id ) = $dbh->selectrow_array(
             q[
 SELECT id, hash_id FROM test_results WHERE params_deterministic_hash = ? AND (TO_SECONDS(NOW()) - TO_SECONDS(creation_time)) < ?
@@ -156,7 +156,7 @@ SELECT id, hash_id FROM test_results WHERE params_deterministic_hash = ? AND (TO
 			}
         }
     };
-    $dbh->do( q[UNLOCK TABLES] );
+    #$dbh->do( q[UNLOCK TABLES] );
 
     return $result_id;
 }
@@ -171,7 +171,7 @@ sub test_progress {
 		if ($progress == 1) {
 			$dbh->do( "UPDATE test_results SET progress=?, test_start_time=NOW() WHERE $id_field=?", undef, $progress, $test_id );
 		}
-		else {
+		elsif($progress == 100) {
 			$dbh->do( "UPDATE test_results SET progress=? WHERE $id_field=?", undef, $progress, $test_id );
 		}
 	}
@@ -291,9 +291,9 @@ sub add_batch_job {
 		$queue = $test_params->{queue} if (defined $test_params->{queue});
 		
 		$dbh->{AutoCommit} = 0;
-		eval {$dbh->do( "DROP INDEX test_results__hash_id ON test_results" );};
-		eval {$dbh->do( "DROP INDEX test_results__params_deterministic_hash ON test_results" );};
-		eval {$dbh->do( "DROP INDEX test_results__batch_id_progress ON test_results" );};
+#		eval {$dbh->do( "DROP INDEX test_results__hash_id ON test_results" );};
+#		eval {$dbh->do( "DROP INDEX test_results__params_deterministic_hash ON test_results" );};
+#		eval {$dbh->do( "DROP INDEX test_results__batch_id_progress ON test_results" );};
 		
 		my $sth = $dbh->prepare( 'INSERT INTO test_results (domain, batch_id, priority, queue, params_deterministic_hash, params) VALUES (?, ?, ?, ?, ?, ?) ' );
         foreach my $domain ( @{$params->{domains}} ) {
@@ -303,9 +303,9 @@ sub add_batch_job {
 
 			$sth->execute( $test_params->{domain}, $batch_id, $priority, $queue, $test_params_deterministic_hash, $encoded_params );
         }
-		$dbh->do( "CREATE INDEX test_results__hash_id ON test_results (hash_id, creation_time)" );
-		$dbh->do( "CREATE INDEX test_results__params_deterministic_hash ON test_results (params_deterministic_hash)" );
-		$dbh->do( "CREATE INDEX test_results__batch_id_progress ON test_results (batch_id, progress)" );
+#		$dbh->do( "CREATE INDEX test_results__hash_id ON test_results (hash_id, creation_time)" );
+#		$dbh->do( "CREATE INDEX test_results__params_deterministic_hash ON test_results (params_deterministic_hash)" );
+#		$dbh->do( "CREATE INDEX test_results__batch_id_progress ON test_results (batch_id, progress)" );
        
         $dbh->commit();
         $dbh->{AutoCommit} = 1;
@@ -315,6 +315,29 @@ sub add_batch_job {
     }
 
     return $batch_id;
+}
+
+sub is_domain_available {
+    my ( $self, $test_id ) = @_;
+
+    my ( $domain_cnt ) = $self->dbh->selectrow_array( "SELECT count(1) as domain_cnt FROM temp_domain WHERE domain_id = ?", undef, $test_id );
+
+    return $domain_cnt;
+}
+
+sub add_domain_temp {
+    my ( $self, $test_id ) = @_;
+
+    $self->dbh->do( "INSERT INTO temp_domain (domain_id) values(?)", undef, $test_id );
+
+    return ;
+}
+sub delete_domain_temp {
+    my ( $self, $test_id ) = @_;
+
+    $self->dbh->do( "DELETE from temp_domain WHERE domain_id = ?", undef, $test_id );
+
+    return ;
 }
 
 

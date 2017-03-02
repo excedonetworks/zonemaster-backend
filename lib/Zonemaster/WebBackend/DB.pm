@@ -1,6 +1,6 @@
 package Zonemaster::WebBackend::DB;
 
-our $VERSION = '1.1.0';
+our $VERSION = '1.0.7';
 
 use Moose::Role;
 
