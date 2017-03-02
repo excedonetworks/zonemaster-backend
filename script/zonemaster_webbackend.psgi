@@ -68,6 +68,11 @@ my $router = router {
 		handler => "+Zonemaster::WebBackend::Engine",
 		action => "get_test_history"
 	};
+	
+	connect "check_test_exist" => {
+                handler => "+Zonemaster::WebBackend::Engine",
+                action => "check_test_exist"
+        };
 
 ############ BATCH MODE ####################
 
