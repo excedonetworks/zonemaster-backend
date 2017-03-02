@@ -272,6 +272,57 @@ sub get_test_history {
     return \@results;
 }
 
+sub check_test_exist {
+    my ( $self, $p ) = @_;
+
+    my @results;
+    
+    my $use_hash_id_from_id = Zonemaster::WebBackend::Config->force_hash_id_use_in_API_starting_from_id();
+    
+    my $sth = $self->dbh->prepare(
+			q[SELECT 
+				id, 
+				hash_id, 
+				CONVERT_TZ(`creation_time`, @@session.time_zone, '+00:00') AS creation_time, 
+				params, 
+				results 
+			FROM 
+				test_results 
+			WHERE 
+				domain = ? 
+				AND progress = 100 
+                                AND creation_time > (NOW() - INTERVAL 1 DAY) 
+                                ORDER BY id DESC]
+    );
+    $sth->execute( $p->{frontend_params}{domain} );
+    while ( my $h = $sth->fetchrow_hashref ) {
+        $h->{results} = decode_json($h->{results}) if $h->{results};
+        $h->{params} = decode_json($h->{params}) if $h->{params};
+        my $critical = ( grep { $_->{level} eq 'CRITICAL' } @{ $h->{results} } );
+        my $error    = ( grep { $_->{level} eq 'ERROR' } @{ $h->{results} } );
+        my $warning  = ( grep { $_->{level} eq 'WARNING' } @{ $h->{results} } );
+
+        # More important overwrites
+        my $overall = 'INFO';
+        $overall = 'warning'  if $warning;
+        $overall = 'error'    if $error;
+        $overall = 'critical' if $critical;
+
+        push(
+            @results,
+            {
+                id               => $h->{id},
+                hash_id          => $h->{hash_id},
+                creation_time    => $h->{creation_time},
+                advanced_options => $h->{params}{advanced_options},
+                overall_result   => $overall,
+            }
+        );
+    }
+
+    return \@results;
+}
+
 sub add_batch_job {
     my ( $self, $params ) = @_;
     my $batch_id;

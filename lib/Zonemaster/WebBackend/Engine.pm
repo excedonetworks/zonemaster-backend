@@ -375,6 +375,14 @@ sub get_test_history {
     return $results;
 }
 
+sub check_test_exist {
+    my ( $self, $p ) = @_;
+
+    my $results = $self->{db}->check_test_exist( $p );
+
+    return $results;
+}
+
 sub add_api_user {
     my ( $self, $p, undef, $remote_ip ) = @_;
     my $result = 0;
