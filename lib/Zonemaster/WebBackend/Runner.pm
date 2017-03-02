@@ -1,5 +1,5 @@
 package Zonemaster::WebBackend::Runner;
-our $VERSION = '1.0.7';
+our $VERSION = '1.1.0';
 
 use strict;
 use warnings;
@@ -164,8 +164,8 @@ sub run {
     $self->{db}->test_results( $test_id, Zonemaster->logger->json( 'INFO' ) );
 
     $progress = $self->{db}->test_progress( $test_id );
-    
     $self->{db}->delete_domain_temp( $test_id );
+    
     return;
 } ## end sub run
 

@@ -1,6 +1,6 @@
 package Zonemaster::WebBackend::Engine;
 
-our $VERSION = '1.0.7';
+our $VERSION = '1.1.0';
 
 use strict;
 use warnings;
@@ -386,6 +386,7 @@ sub add_api_user {
     else {
         $allow = 1;
     }
+
     if ( $allow ) {
 		$result = 1 if ( $self->{db}->add_api_user( $p->{username}, $p->{api_key} ) eq '1' );
     }

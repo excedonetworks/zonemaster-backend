@@ -1,6 +1,6 @@
 package Zonemaster::WebBackend::DB::MySQL;
 
-our $VERSION = '1.0.7';
+our $VERSION = '1.1.0';
 
 use Moose;
 use 5.14.2;
@@ -90,8 +90,8 @@ sub create_new_batch_job {
     die "You can't create a new batch job, job:[$batch_id] started on:[$creaton_time] still running " if ( $batch_id );
 
     $self->dbh->do( "INSERT INTO batch_jobs (username) VALUES(?)", undef, $username );
-    my ( $new_batch_id ) = $self->dbh->{mysql_insertid};
-
+    my  ($new_batch_id)  = $self->dbh->selectrow_array('select id FROM batch_jobs WHERE username=? limit 1', undef, $username);
+    print "batch Id is : " . $new_batch_id;
     return $new_batch_id;
 }
 
@@ -113,7 +113,7 @@ sub create_new_test {
     my $result_id;
 
     eval {
-        #$dbh->do( q[LOCK TABLES test_results WRITE] );
+#        $dbh->do( q[LOCK TABLES test_results WRITE] );
         my ( $recent_id, $recent_hash_id ) = $dbh->selectrow_array(
             q[
 SELECT id, hash_id FROM test_results WHERE params_deterministic_hash = ? AND (TO_SECONDS(NOW()) - TO_SECONDS(creation_time)) < ?
@@ -156,7 +156,7 @@ SELECT id, hash_id FROM test_results WHERE params_deterministic_hash = ? AND (TO
 			}
         }
     };
-    #$dbh->do( q[UNLOCK TABLES] );
+ #   $dbh->do( q[UNLOCK TABLES] );
 
     return $result_id;
 }
@@ -171,7 +171,7 @@ sub test_progress {
 		if ($progress == 1) {
 			$dbh->do( "UPDATE test_results SET progress=?, test_start_time=NOW() WHERE $id_field=?", undef, $progress, $test_id );
 		}
-		elsif($progress == 100) {
+		elsif ($progress == 100) {
 			$dbh->do( "UPDATE test_results SET progress=? WHERE $id_field=?", undef, $progress, $test_id );
 		}
 	}
@@ -247,10 +247,15 @@ sub get_test_history {
         my $warning  = ( grep { $_->{level} eq 'WARNING' } @{ $h->{results} } );
 
         # More important overwrites
-        my $overall = 'INFO';
+        my $overall = 'ok';
         $overall = 'warning'  if $warning;
         $overall = 'error'    if $error;
         $overall = 'critical' if $critical;
+
+        my $overall_class = "fa fa-check";
+        $overall_class = 'fa fa-bolt'  if $warning;
+        $overall_class = 'fa fa-times'    if $error;
+        $overall_class = 'fa fa-times' if $critical;
 
         push(
             @results,
@@ -259,6 +264,7 @@ sub get_test_history {
                 creation_time    => $h->{creation_time},
                 advanced_options => $h->{params}{advanced_options},
                 overall_result   => $overall,
+                overall_class    => $overall_class,
             }
         );
     }
@@ -269,8 +275,8 @@ sub get_test_history {
 sub add_batch_job {
     my ( $self, $params ) = @_;
     my $batch_id;
-
-	my $dbh = $self->dbh;
+	
+        my $dbh = $self->dbh;
 	my $js = JSON->new;
 	$js->canonical( 1 );
     		
@@ -278,7 +284,6 @@ sub add_batch_job {
         $params->{test_params}->{client_id}      = 'Zonemaster Batch Scheduler';
         $params->{test_params}->{client_version} = '1.0';
         $params->{test_params}->{priority} = 5 unless (defined $params->{test_params}->{priority});
-
         $batch_id = $self->create_new_batch_job( $params->{username} );
 
         my $minutes_between_tests_with_same_params = 5;
@@ -286,14 +291,13 @@ sub add_batch_job {
 		
 		my $priority = 10;
 		$priority = $test_params->{priority} if (defined $test_params->{priority});
-		
 		my $queue = 0;
 		$queue = $test_params->{queue} if (defined $test_params->{queue});
 		
 		$dbh->{AutoCommit} = 0;
-#		eval {$dbh->do( "DROP INDEX test_results__hash_id ON test_results" );};
-#		eval {$dbh->do( "DROP INDEX test_results__params_deterministic_hash ON test_results" );};
-#		eval {$dbh->do( "DROP INDEX test_results__batch_id_progress ON test_results" );};
+		#eval {$dbh->do( "DROP INDEX test_results__hash_id ON test_results" );};
+		#eval {$dbh->do( "DROP INDEX test_results__params_deterministic_hash ON test_results" );};
+		#eval {$dbh->do( "DROP INDEX test_results__batch_id_progress ON test_results" );};
 		
 		my $sth = $dbh->prepare( 'INSERT INTO test_results (domain, batch_id, priority, queue, params_deterministic_hash, params) VALUES (?, ?, ?, ?, ?, ?) ' );
         foreach my $domain ( @{$params->{domains}} ) {
@@ -303,9 +307,9 @@ sub add_batch_job {
 
 			$sth->execute( $test_params->{domain}, $batch_id, $priority, $queue, $test_params_deterministic_hash, $encoded_params );
         }
-#		$dbh->do( "CREATE INDEX test_results__hash_id ON test_results (hash_id, creation_time)" );
-#		$dbh->do( "CREATE INDEX test_results__params_deterministic_hash ON test_results (params_deterministic_hash)" );
-#		$dbh->do( "CREATE INDEX test_results__batch_id_progress ON test_results (batch_id, progress)" );
+	#	$dbh->do( "CREATE INDEX test_results__hash_id ON test_results (hash_id, creation_time)" );
+	#	$dbh->do( "CREATE INDEX test_results__params_deterministic_hash ON test_results (params_deterministic_hash)" );
+	#	$dbh->do( "CREATE INDEX test_results__batch_id_progress ON test_results (batch_id, progress)" );
        
         $dbh->commit();
         $dbh->{AutoCommit} = 1;
@@ -316,6 +320,7 @@ sub add_batch_job {
 
     return $batch_id;
 }
+
 
 sub is_domain_available {
     my ( $self, $test_id ) = @_;
@@ -339,7 +344,6 @@ sub delete_domain_temp {
 
     return ;
 }
-
 
 no Moose;
 __PACKAGE__->meta()->make_immutable();

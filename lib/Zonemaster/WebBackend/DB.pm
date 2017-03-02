@@ -1,6 +1,6 @@
 package Zonemaster::WebBackend::DB;
 
-our $VERSION = '1.0.7';
+our $VERSION = '1.1.0';
 
 use Moose::Role;
 
@@ -57,7 +57,7 @@ sub get_test_request {
 
     my $result_id;
     my $dbh = $self->dbh;
-    
+    $dbh->{AutoCommit} = 0;
     
     my ( $id, $hash_id );
     my $lock_on_queue = Zonemaster::WebBackend::Config->lock_on_queue();
@@ -65,7 +65,8 @@ sub get_test_request {
 		( $id, $hash_id ) = $dbh->selectrow_array( qq[ SELECT id, hash_id FROM test_results WHERE progress=0 AND queue=? ORDER BY priority DESC, id ASC LIMIT 1 ], undef, $lock_on_queue );
 	}
 	else {
-		( $id, $hash_id ) = $dbh->selectrow_array( q[ SELECT id, hash_id FROM test_results WHERE progress=0 ORDER BY priority DESC, id ASC LIMIT 1 ] );
+		#my $batch_id = $self->get_distinct_batch_jobs();
+		( $id, $hash_id ) = $dbh->selectrow_array( q[ SELECT id, hash_id FROM test_results WHERE progress=0 ORDER BY priority DESC, id ASC LIMIT 1 ]);
 	}
         
     if ($id) {
@@ -78,7 +79,9 @@ sub get_test_request {
 			$result_id = $id;
 		}
 	}
-   
+        $dbh->commit();
+        $dbh->{AutoCommit} = 1;
+
 	return $result_id;
 }
 
@@ -110,6 +113,21 @@ sub get_batch_job_result {
 	}
 	
 	return \%result;
+}
+
+# Standatd SQL, can be here
+sub get_distinct_batch_jobs {
+        my ( $self ) = @_;
+
+        my $dbh = $self->dbh;
+
+        my $batch_id = 0;
+
+        my $query = "select distinct batch_id from test_results where progress=0 order by batch_id limit 1";
+	($batch_id ) = $dbh->selectrow_array($query);
+
+	return $batch_id;
+     
 }
 
 no Moose::Role;
