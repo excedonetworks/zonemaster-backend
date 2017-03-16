@@ -95,8 +95,9 @@ sub main {
     my $db = $dbclass->new;
 
     while ( 1 ) {
-        my $id = $db->get_test_request();
-
+	my $batch_id = $db->get_distinct_batch_jobs();
+        my $id = $db->get_test_request($batch_id);
+	
         if ( $id ) {
             $pm->wait_for_available_procs();
             if ( $pm->start( $id ) == 0 ) {    # Child process

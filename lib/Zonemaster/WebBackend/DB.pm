@@ -53,7 +53,7 @@ sub _get_allowed_id_field_name {
 
 # Standatd SQL, can be here
 sub get_test_request {
-    my ( $self ) = @_;
+    my ( $self, $batch_id ) = @_;
 
     my $result_id;
     my $dbh = $self->dbh;
@@ -63,8 +63,9 @@ sub get_test_request {
     my $lock_on_queue = Zonemaster::WebBackend::Config->lock_on_queue();
 	if ( defined $lock_on_queue ) {
 		( $id, $hash_id ) = $dbh->selectrow_array( qq[ SELECT id, hash_id FROM test_results WHERE progress=0 AND queue=? ORDER BY priority DESC, id ASC LIMIT 1 ], undef, $lock_on_queue );
-	}
-	else {
+	} elsif ($batch_id) {
+                ( $id, $hash_id ) = $dbh->selectrow_array( q[ SELECT id, hash_id FROM test_results WHERE batch_id=$batch_id ORDER BY priority DESC, id ASC LIMIT 1 ]);
+        } else {
 		#my $batch_id = $self->get_distinct_batch_jobs();
 		( $id, $hash_id ) = $dbh->selectrow_array( q[ SELECT id, hash_id FROM test_results WHERE progress=0 ORDER BY priority DESC, id ASC LIMIT 1 ]);
 	}
