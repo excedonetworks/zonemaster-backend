@@ -90,8 +90,8 @@ sub create_new_batch_job {
     die "You can't create a new batch job, job:[$batch_id] started on:[$creaton_time] still running " if ( $batch_id );
 
     $self->dbh->do( "INSERT INTO batch_jobs (username) VALUES(?)", undef, $username );
-    my  ($new_batch_id)  = $self->dbh->selectrow_array('select id FROM batch_jobs WHERE username=? limit 1', undef, $username);
-    print "batch Id is : " . $new_batch_id;
+    my ( $new_batch_id ) = $self->dbh->{mysql_insertid};
+
     return $new_batch_id;
 }
 
@@ -156,7 +156,7 @@ SELECT id, hash_id FROM test_results WHERE params_deterministic_hash = ? AND (TO
 			}
         }
     };
- #   $dbh->do( q[UNLOCK TABLES] );
+#    $dbh->do( q[UNLOCK TABLES] );
 
     return $result_id;
 }
@@ -252,10 +252,10 @@ sub get_test_history {
         $overall = 'error'    if $error;
         $overall = 'critical' if $critical;
 
-        my $overall_class = "fa fa-check";
-        $overall_class = 'fa fa-bolt'  if $warning;
-        $overall_class = 'fa fa-times'    if $error;
-        $overall_class = 'fa fa-times' if $critical;
+	my $overall_class = "fa fa-check";
+	$overall_class = 'fa fa-bolt'  if $warning;
+	$overall_class = 'fa fa-times'    if $error;
+	$overall_class = 'fa fa-times' if $critical;
 
         push(
             @results,
@@ -264,7 +264,7 @@ sub get_test_history {
                 creation_time    => $h->{creation_time},
                 advanced_options => $h->{params}{advanced_options},
                 overall_result   => $overall,
-                overall_class    => $overall_class,
+		overall_class    => $overall_class,
             }
         );
     }
@@ -273,61 +273,62 @@ sub get_test_history {
 }
 
 sub check_test_exist {
-    my ( $self, $p ) = @_;
+        my ( $self, $p ) = @_;
 
-    my @results;
-    
-    my $use_hash_id_from_id = Zonemaster::WebBackend::Config->force_hash_id_use_in_API_starting_from_id();
-    
-    my $sth = $self->dbh->prepare(
-			q[SELECT 
-				id, 
-				hash_id, 
-				CONVERT_TZ(`creation_time`, @@session.time_zone, '+00:00') AS creation_time, 
-				params, 
-				results 
-			FROM 
-				test_results 
-			WHERE 
-				domain = ? 
-				AND progress = 100 
-                                AND creation_time > (NOW() - INTERVAL 1 DAY) 
-                                ORDER BY id DESC]
-    );
-    $sth->execute( $p->{frontend_params}{domain} );
-    while ( my $h = $sth->fetchrow_hashref ) {
-        $h->{results} = decode_json($h->{results}) if $h->{results};
-        $h->{params} = decode_json($h->{params}) if $h->{params};
-        my $critical = ( grep { $_->{level} eq 'CRITICAL' } @{ $h->{results} } );
-        my $error    = ( grep { $_->{level} eq 'ERROR' } @{ $h->{results} } );
-        my $warning  = ( grep { $_->{level} eq 'WARNING' } @{ $h->{results} } );
+	my @results;
 
-        # More important overwrites
-        my $overall = 'INFO';
-        $overall = 'warning'  if $warning;
-        $overall = 'error'    if $error;
-        $overall = 'critical' if $critical;
+	my $use_hash_id_from_id = Zonemaster::WebBackend::Config->force_hash_id_use_in_API_starting_from_id();
 
-        push(
-            @results,
-            {
-                id               => $h->{id},
-                hash_id          => $h->{hash_id},
-                creation_time    => $h->{creation_time},
-                advanced_options => $h->{params}{advanced_options},
-                overall_result   => $overall,
-            }
-        );
-    }
+	my $sth = $self->dbh->prepare(
+		q[SELECT 
+			id, 
+			hash_id, 
+			CONVERT_TZ(`creation_time`, @@session.time_zone, '+00:00') AS creation_time, 
+			params, 
+			results 
+		FROM 
+			test_results 
+		WHERE 
+			domain = ? 
+			AND progress = 100 
+			AND creation_time > (NOW() - INTERVAL 1 DAY) 
+		ORDER BY id DESC]
+		);
+	$sth->execute( $p->{frontend_params}{domain} );
+	while ( my $h = $sth->fetchrow_hashref ) {
+		$h->{results} = decode_json($h->{results}) if $h->{results};
+		$h->{params} = decode_json($h->{params}) if $h->{params};
+		my $critical = ( grep { $_->{level} eq 'CRITICAL' } @{ $h->{results} } );
+		my $error    = ( grep { $_->{level} eq 'ERROR' } @{ $h->{results} } );
+		my $warning  = ( grep { $_->{level} eq 'WARNING' } @{ $h->{results} } );
 
-    return \@results;
+		# More important overwrites
+	
+	       	my $overall = 'INFO';
+		$overall = 'warning'  if $warning;
+		$overall = 'error'    if $error;
+		$overall = 'critical' if $critical;
+	
+		 push(
+	 		@results,
+	 		{
+			 id               => $h->{id},
+			 hash_id          => $h->{hash_id},
+			 creation_time    => $h->{creation_time},
+			 advanced_options => $h->{params}{advanced_options},
+			 overall_result   => $overall,
+	 		}
+	 	);
+	 }
+	
+	
+	return \@results;
 }
-
 sub add_batch_job {
     my ( $self, $params ) = @_;
     my $batch_id;
-	
-        my $dbh = $self->dbh;
+
+	my $dbh = $self->dbh;
 	my $js = JSON->new;
 	$js->canonical( 1 );
     		
@@ -335,6 +336,7 @@ sub add_batch_job {
         $params->{test_params}->{client_id}      = 'Zonemaster Batch Scheduler';
         $params->{test_params}->{client_version} = '1.0';
         $params->{test_params}->{priority} = 5 unless (defined $params->{test_params}->{priority});
+
         $batch_id = $self->create_new_batch_job( $params->{username} );
 
         my $minutes_between_tests_with_same_params = 5;
@@ -342,13 +344,14 @@ sub add_batch_job {
 		
 		my $priority = 10;
 		$priority = $test_params->{priority} if (defined $test_params->{priority});
+		
 		my $queue = 0;
 		$queue = $test_params->{queue} if (defined $test_params->{queue});
 		
 		$dbh->{AutoCommit} = 0;
-		#eval {$dbh->do( "DROP INDEX test_results__hash_id ON test_results" );};
-		#eval {$dbh->do( "DROP INDEX test_results__params_deterministic_hash ON test_results" );};
-		#eval {$dbh->do( "DROP INDEX test_results__batch_id_progress ON test_results" );};
+#		eval {$dbh->do( "DROP INDEX test_results__hash_id ON test_results" );};
+#		eval {$dbh->do( "DROP INDEX test_results__params_deterministic_hash ON test_results" );};
+#		eval {$dbh->do( "DROP INDEX test_results__batch_id_progress ON test_results" );};
 		
 		my $sth = $dbh->prepare( 'INSERT INTO test_results (domain, batch_id, priority, queue, params_deterministic_hash, params) VALUES (?, ?, ?, ?, ?, ?) ' );
         foreach my $domain ( @{$params->{domains}} ) {
@@ -358,9 +361,9 @@ sub add_batch_job {
 
 			$sth->execute( $test_params->{domain}, $batch_id, $priority, $queue, $test_params_deterministic_hash, $encoded_params );
         }
-	#	$dbh->do( "CREATE INDEX test_results__hash_id ON test_results (hash_id, creation_time)" );
-	#	$dbh->do( "CREATE INDEX test_results__params_deterministic_hash ON test_results (params_deterministic_hash)" );
-	#	$dbh->do( "CREATE INDEX test_results__batch_id_progress ON test_results (batch_id, progress)" );
+#		$dbh->do( "CREATE INDEX test_results__hash_id ON test_results (hash_id, creation_time)" );
+#		$dbh->do( "CREATE INDEX test_results__params_deterministic_hash ON test_results (params_deterministic_hash)" );
+#		$dbh->do( "CREATE INDEX test_results__batch_id_progress ON test_results (batch_id, progress)" );
        
         $dbh->commit();
         $dbh->{AutoCommit} = 1;
@@ -372,29 +375,30 @@ sub add_batch_job {
     return $batch_id;
 }
 
-
 sub is_domain_available {
-    my ( $self, $test_id ) = @_;
+	my ( $self, $test_id ) = @_;
 
-    my ( $domain_cnt ) = $self->dbh->selectrow_array( "SELECT count(1) as domain_cnt FROM temp_domain WHERE domain_id = ?", undef, $test_id );
-
-    return $domain_cnt;
+	my ( $domain_cnt ) = $self->dbh->selectrow_array( "SELECT count(1) as domain_cnt FROM temp_domain WHERE domain_id = ?", undef, $test_id );
+	
+	return $domain_cnt;
 }
 
 sub add_domain_temp {
-    my ( $self, $test_id ) = @_;
+	my ( $self, $test_id ) = @_;
 
-    $self->dbh->do( "INSERT INTO temp_domain (domain_id) values(?)", undef, $test_id );
+	$self->dbh->do( "INSERT INTO temp_domain (domain_id) values(?)", undef, $test_id );
 
-    return ;
+	return ;
 }
+
 sub delete_domain_temp {
-    my ( $self, $test_id ) = @_;
+	my ( $self, $test_id ) = @_;
 
-    $self->dbh->do( "DELETE from temp_domain WHERE domain_id = ?", undef, $test_id );
+	$self->dbh->do( "DELETE from temp_domain WHERE domain_id = ?", undef, $test_id );
 
-    return ;
+	return ;
 }
+
 
 no Moose;
 __PACKAGE__->meta()->make_immutable();

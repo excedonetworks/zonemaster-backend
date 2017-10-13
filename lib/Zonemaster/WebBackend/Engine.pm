@@ -376,11 +376,9 @@ sub get_test_history {
 }
 
 sub check_test_exist {
-    my ( $self, $p ) = @_;
-
-    my $results = $self->{db}->check_test_exist( $p );
-
-    return $results;
+	my ( $self, $p ) = @_;
+	my $results = $self->{db}->check_test_exist( $p );
+	return $results;
 }
 
 sub add_api_user {

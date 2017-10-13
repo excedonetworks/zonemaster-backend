@@ -37,12 +37,7 @@ sub run {
     my @accumulator;
     my %counter;
     my %counter_for_progress_indicator;
-    my $domain_already_taken = $self->{db}->is_domain_available( $test_id );
-    if ($domain_already_taken) {
-        return;
-    } else {
-        $self->{db}->add_domain_temp( $test_id );
-    }
+
     my $params;
 
     my $progress = $self->{db}->test_progress( $test_id, 1 );
@@ -164,8 +159,7 @@ sub run {
     $self->{db}->test_results( $test_id, Zonemaster->logger->json( 'INFO' ) );
 
     $progress = $self->{db}->test_progress( $test_id );
-    $self->{db}->delete_domain_temp( $test_id );
-    
+
     return;
 } ## end sub run
 

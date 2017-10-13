@@ -57,18 +57,20 @@ sub get_test_request {
 
     my $result_id;
     my $dbh = $self->dbh;
-    $dbh->{AutoCommit} = 0;
+    #$dbh->{AutoCommit} = 0;
     
     my ( $id, $hash_id );
     my $lock_on_queue = Zonemaster::WebBackend::Config->lock_on_queue();
 	if ( defined $lock_on_queue ) {
 		( $id, $hash_id ) = $dbh->selectrow_array( qq[ SELECT id, hash_id FROM test_results WHERE progress=0 AND queue=? ORDER BY priority DESC, id ASC LIMIT 1 ], undef, $lock_on_queue );
-	} elsif ($batch_id) {
-                ( $id, $hash_id ) = $dbh->selectrow_array( q[ SELECT id, hash_id FROM test_results WHERE batch_id=$batch_id ORDER BY priority DESC, id ASC LIMIT 1 ]);
-        } else {
+	}
+#	elsif (defined $batch_id) {
+#		( $id, $hash_id ) = $dbh->selectrow_array( qq[ SELECT id, hash_id FROM test_results WHERE batch_id = ? ORDER BY priority DESC, id ASC LIMIT 1 ], undef, $batch_id );
+#	}
+	else {
 		#my $batch_id = $self->get_distinct_batch_jobs();
 		( $id, $hash_id ) = $dbh->selectrow_array( q[ SELECT id, hash_id FROM test_results WHERE progress=0 ORDER BY priority DESC, id ASC LIMIT 1 ]);
-	}
+	}	
         
     if ($id) {
 		$dbh->do( q[UPDATE test_results SET progress=1 WHERE id=?], undef, $id );
@@ -80,13 +82,22 @@ sub get_test_request {
 			$result_id = $id;
 		}
 	}
-        $dbh->commit();
-        $dbh->{AutoCommit} = 1;
-
+#        $dbh->commit(); 
+#	$dbh->{AutoCommit} = 1;
 	return $result_id;
 }
 
 # Standatd SQL, can be here
+sub get_distinct_batch_jobs {
+	my ( $self ) = @_;
+	my $dbh = $self->dbh;
+	my $batch_id = 0;
+	my $query = "select distinct batch_id from test_results where progress=0 order by batch_id limit 1";
+	($batch_id ) = $dbh->selectrow_array($query);
+
+	return $batch_id;
+}
+
 sub get_batch_job_result {
 	my ( $self, $batch_id ) = @_;
 
@@ -114,21 +125,6 @@ sub get_batch_job_result {
 	}
 	
 	return \%result;
-}
-
-# Standatd SQL, can be here
-sub get_distinct_batch_jobs {
-        my ( $self ) = @_;
-
-        my $dbh = $self->dbh;
-
-        my $batch_id = 0;
-
-        my $query = "select distinct batch_id from test_results where progress=0 order by batch_id limit 1";
-	($batch_id ) = $dbh->selectrow_array($query);
-
-	return $batch_id;
-     
 }
 
 no Moose::Role;
