@@ -1,4 +1,4 @@
-package Zonemaster::WebBackend::Runner;
+package Zonemaster::Backend::TestAgent;
 our $VERSION = '1.1.0';
 
 use strict;
@@ -6,26 +6,45 @@ use warnings;
 use 5.14.2;
 
 use DBI qw(:utils);
-use JSON;
+use JSON::PP;
+use Scalar::Util qw( blessed );
+use File::Slurp;
 
-use Net::LDNS;
+use Zonemaster::LDNS;
 
-use Zonemaster;
-use Zonemaster::Translator;
-use Zonemaster::WebBackend::Config;
+use Zonemaster::Engine;
+use Zonemaster::Engine::Translator;
+use Zonemaster::Backend::Config;
+use Zonemaster::Engine::Profile;
 
 sub new {
     my ( $class, $params ) = @_;
     my $self = {};
 
+    if ( $params && $params->{config} ) {
+        $self->{config} = $params->{config};
+    }
+
     if ( $params && $params->{db} ) {
         eval "require $params->{db}";
-        $self->{db} = "$params->{db}"->new();
+        $self->{db} = "$params->{db}"->new( { config => $self->{config} } );
     }
     else {
-        my $backend_module = "Zonemaster::WebBackend::DB::" . Zonemaster::WebBackend::Config->BackendDBType();
+        my $backend_module = "Zonemaster::Backend::DB::" . $self->{config}->BackendDBType();
         eval "require $backend_module";
-        $self->{db} = $backend_module->new();
+        $self->{db} = $backend_module->new( { config => $self->{config} } );
+    }
+        
+    $self->{profiles} = $self->{config}->ReadProfilesInfo();
+    foreach my $profile (keys %{$self->{profiles}}) {
+        die "default profile cannot be private" if ($profile eq 'default' && $self->{profiles}->{$profile}->{type} eq 'private');
+        if ( -e $self->{profiles}->{$profile}->{profile_file_name} ) {
+            my $json = read_file( $self->{profiles}->{$profile}->{profile_file_name}, err_mode => 'croak' );
+            $self->{profiles}->{$profile}->{zm_profile} = Zonemaster::Engine::Profile->from_json( $json );
+        }
+        elsif ($profile ne 'default') {
+            die "the profile definition json file of the profile [$profile] defined in the backend config file can't be read";
+        }
     }
 
     bless( $self, $class );
@@ -44,7 +63,7 @@ sub run {
 
     $params = $self->{db}->get_test_params( $test_id );
 
-    my %methods = Zonemaster->all_methods;
+    my %methods = Zonemaster::Engine->all_methods;
 
     foreach my $module ( keys %methods ) {
         foreach my $method ( @{ $methods{$module} } ) {
@@ -58,20 +77,19 @@ sub run {
     }
     $domain = $self->to_idn( $domain );
 
-    if (defined $params->{ipv4} || defined $params->{ipv4}) {
-		Zonemaster->config->get->{net}{ipv4} = ( $params->{ipv4} ) ? ( 1 ) : ( 0 );
-		Zonemaster->config->get->{net}{ipv6} = ( $params->{ipv6} ) ? ( 1 ) : ( 0 );
-	}
-	else {
-		Zonemaster->config->get->{net}{ipv4} = 1;
-		Zonemaster->config->get->{net}{ipv6} = 1;
-	}
+    if (defined $params->{ipv4}) {
+        Zonemaster::Engine::Profile->effective->set( q{net.ipv4}, ( $params->{ipv4} ) ? ( 1 ) : ( 0 ) );
+    }
+
+    if (defined $params->{ipv6}) {
+        Zonemaster::Engine::Profile->effective->set( q{net.ipv6}, ( $params->{ipv6} ) ? ( 1 ) : ( 0 ) );
+    }
 
     # used for progress indicator
     my ( $previous_module, $previous_method ) = ( '', '' );
 
     # Callback defined here so it closes over the setup above.
-    Zonemaster->logger->callback(
+    Zonemaster::Engine->logger->callback(
         sub {
             my ( $entry ) = @_;
 
@@ -95,7 +113,7 @@ sub run {
                         if ( $previous_method ne $module_method ) {
                             $percent_progress = sprintf(
                                 "%.0f",
-                                100 * (
+                                99 * (
                                     scalar( keys %{ $counter_for_progress_indicator{executed} } ) /
                                       scalar( keys %{ $counter_for_progress_indicator{planned} } )
                                 )
@@ -120,67 +138,68 @@ sub run {
         $self->add_fake_ds( $domain, $params->{ds_info} );
     }
     
-    if ( $params->{profile} eq 'test_profile_1' ) {
-		if (Zonemaster::WebBackend::Config->CustomProfilesPath()) {
-			Zonemaster->config->load_policy_file( Zonemaster::WebBackend::Config->CustomProfilesPath() . '/iana-profile.json' );
-		}
-		else {
-			Zonemaster->config->load_policy_file( 'iana-profile.json' );
-		}
-	}
 
-	if ( $params->{config} ) {
-		my $config_file_path = Zonemaster::WebBackend::Config->GetCustomConfigParameter('ZONEMASTER', $params->{config});
-		if ($config_file_path) {
-			if (-e $config_file_path) {
-				Zonemaster->config->load_config_file( $config_file_path );
-			}
-			else {
-				die "The file specified by the config parameter value: [$params->{config}] doesn't exist";
-			}
-		}
-		else {
-			die "Unknown test configuration: [$params->{config}]\n"
-		}
-	}
+    # If the profile parameter has been set in the API, then load a profile
+    if ( $params->{profile} ) {
+        $params->{profile} = lc($params->{profile});
+        if (defined $self->{profiles}->{$params->{profile}} && $self->{profiles}->{$params->{profile}}->{zm_profile}) { 
+            my $profile = Zonemaster::Engine::Profile->default;
+            $profile->merge( $self->{profiles}->{$params->{profile}}->{zm_profile} );
+            Zonemaster::Engine::Profile->effective->merge( $profile );
+        }
+        else {
+            die "The profile [$params->{profile}] is not defined in the backend_config ini file" if ($params->{profile} ne 'default')
+        }
+    }
 
     # Actually run tests!
-    eval { Zonemaster->test_zone( $domain ); };
+    eval { Zonemaster::Engine->test_zone( $domain ); };
     if ( $@ ) {
         my $err = $@;
         if ( blessed $err and $err->isa( "NormalExit" ) ) {
             say STDERR "Exited early: " . $err->message;
         }
         else {
-            die $err;    # Don't know what it is, rethrow
+            die "$err\n";    # Don't know what it is, rethrow
         }
     }
 
-    $self->{db}->test_results( $test_id, Zonemaster->logger->json( 'INFO' ) );
+    $self->{db}->test_results( $test_id, Zonemaster::Engine->logger->json( 'INFO' ) );
 
     $progress = $self->{db}->test_progress( $test_id );
 
     return;
 } ## end sub run
 
+sub reset {
+    my ( $self ) = @_;
+    Zonemaster::Engine->reset();
+}
+
 sub add_fake_delegation {
     my ( $self, $domain, $nameservers ) = @_;
+    my @ns_with_no_ip;
     my %data;
 
     foreach my $ns_ip_pair ( @$nameservers ) {
-		if ( $ns_ip_pair->{ns} && $ns_ip_pair->{ip} ) {
-			push( @{ $data{ $self->to_idn( $ns_ip_pair->{ns} ) } }, $ns_ip_pair->{ip} );
-		}
-		elsif ($ns_ip_pair->{ns}) {
-			my @ips = Net::LDNS->new->name2addr($ns_ip_pair->{ns});
-			push( @{ $data{ $self->to_idn( $ns_ip_pair->{ns} ) } }, $_) for @ips;
-		}
-		else {
-			die "Invalid ns_ip_pair";
-		}
+        if ( $ns_ip_pair->{ns} && $ns_ip_pair->{ip} ) {
+            push( @{ $data{ $self->to_idn( $ns_ip_pair->{ns} ) } }, $ns_ip_pair->{ip} );
+        }
+        elsif ($ns_ip_pair->{ns}) {
+            push(@ns_with_no_ip, $self->to_idn( $ns_ip_pair->{ns} ) );
+        }
+        else {
+            die "Invalid ns_ip_pair";
+        }
     }
 
-    Zonemaster->add_fake_delegation( $domain => \%data );
+    foreach my $ns ( @ns_with_no_ip ) {
+        if ( not exists $data{ $ns } ) {
+            $data{ $self->to_idn( $ns ) } = undef;
+        }
+    }
+    
+    Zonemaster::Engine->add_fake_delegation( $domain => \%data );
 
     return;
 }
@@ -193,7 +212,7 @@ sub add_fake_ds {
         push @data, { keytag => $ds->{keytag}, algorithm => $ds->{algorithm}, type => $ds->{digtype}, digest => $ds->{digest} };
     }
 
-    Zonemaster->add_fake_ds( $domain => \@data );
+    Zonemaster::Engine->add_fake_ds( $domain => \@data );
 
     return;
 }
@@ -205,11 +224,11 @@ sub to_idn {
         return $str;
     }
 
-    if ( Net::LDNS::has_idn() ) {
-        return Net::LDNS::to_idn( $str );
+    if ( Zonemaster::LDNS::has_idn() ) {
+        return Zonemaster::LDNS::to_idn( $str );
     }
     else {
-        warn __( "Warning: Net::LDNS not compiled with libidn, cannot handle non-ASCII names correctly." );
+        warn __( "Warning: Zonemaster::LDNS not compiled with libidn, cannot handle non-ASCII names correctly." );
         return $str;
     }
 }

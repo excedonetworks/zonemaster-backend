@@ -1,35 +1,37 @@
 use inc::Module::Install;
 
-name 'Zonemaster-WebBackend';
-author q{Michal TOMA <toma@nic.fr>};
-version_from 'lib/Zonemaster/WebBackend/Engine.pm';
-abstract 'The Zonemaster project Web Backend engine';
-license 'perl';
-perl_version '5.014002';
+name 'Zonemaster-Backend';
+all_from 'lib/Zonemaster/Backend.pm';
+repository 'https://github.com/zonemaster/zonemaster-backend';
+bugtracker 'https://github.com/zonemaster/zonemaster-backend/issues';
 
 requires
-  'Zonemaster'               => 0,
-  'Config::IniFiles'         => 0,
-  'DBI'                      => 1.616,
-  'File::Slurp'              => 0,
-  'HTML::Entities'           => 0,
-  'IO::CaptureOutput'        => 0,
-  'JSON::PP'                 => 0,
-  'JSON::RPC::Dispatch'      => 0,
-  'Locale::TextDomain'       => 0,
-  'LWP::UserAgent'           => 0,
-  'Moose'                    => 2.04,
-  'Moose::Role'              => 0,
-  'Net::IP::XS'              => 0.14,
-  'Net::LDNS'                => 0.72,
-  'Plack::Builder'           => 0,
-  'Plack::Middleware::Debug' => 0,
-  'Router::Simple::Declare'  => 0,
-  'String::ShellQuote'       => 0,
-  'Starman'                  => 0,
-  'File::ShareDir'           => 0,
-  'Parallel::ForkManager'    => 1.12,
-  'Daemon::Control'          => 0,
+  'Class::Method::Modifiers'    => 1.09,
+  'Config::IniFiles'            => 0,
+  'DBI'                         => 1.616,
+  'Daemon::Control'             => 0.001007,
+  'File::ShareDir'              => 0,
+  'File::Slurp'                 => 0,
+  'HTML::Entities'              => 0,
+  'IO::CaptureOutput'           => 0,
+  'JSON::PP'                    => 0,
+  'JSON::RPC'                   => 1.01,
+  'JSON::Validator'             => 3.12,
+  'Log::Any'                    => 0,
+  'Log::Any::Adapter::Dispatch' => 0,
+  'Log::Dispatch'               => 0,
+  'Moose'                       => 2.04,
+  'Net::IP::XS'                 => 0.14,
+  'Parallel::ForkManager'       => 1.12,
+  'Plack::Builder'              => 0,
+  'Plack::Middleware::Debug'    => 0.14,
+  'Role::Tiny'                  => 1.001003,
+  'Router::Simple::Declare'     => 0,
+  'Starman'                     => 0,
+  'String::ShellQuote'          => 0,
+  'Try::Tiny'                   => 0.30,
+  'Zonemaster::Engine'          => 3.0,
+  'Zonemaster::LDNS'            => 2.0,
   ;
 
 test_requires 'DBD::SQLite';
@@ -40,8 +42,8 @@ recommends 'DBD::SQLite';
 
 install_share;
 
-install_script 'zonemaster_webbackend.psgi';
-install_script 'zm_wb_daemon';
+install_script 'zonemaster_backend_rpcapi.psgi';
+install_script 'zonemaster_backend_testagent';
 
 no_index directory => 'CodeSnippets';
 no_index directory => 'Doc';

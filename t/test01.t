@@ -3,21 +3,29 @@ use warnings;
 use 5.14.2;
 
 use Test::More;    # see done_testing()
-use Zonemaster;
+use Zonemaster::Engine;
+use JSON::PP;
 
 my $datafile = q{t/test01.data};
 if ( not $ENV{ZONEMASTER_RECORD} ) {
     die q{Stored data file missing} if not -r $datafile;
-    Zonemaster->preload_cache( $datafile );
-    Zonemaster->config->no_network( 1 );
+    Zonemaster::Engine->preload_cache( $datafile );
+	Zonemaster::Engine->profile->set( q{no_network}, 1 );
 }
 
-# Require Zonemaster::WebBackend::Engine.pm test
-use_ok( 'Zonemaster::WebBackend::Engine' );
+# Require Zonemaster::Backend::RPCAPI.pm test
+use_ok( 'Zonemaster::Backend::RPCAPI' );
 
-# Create Zonemaster::WebBackend::Engine object
-my $engine = Zonemaster::WebBackend::Engine->new( { db => 'Zonemaster::WebBackend::DB::SQLite' } );
-isa_ok( $engine, 'Zonemaster::WebBackend::Engine' );
+my $config = Zonemaster::Backend::Config->load_config();
+
+# Create Zonemaster::Backend::RPCAPI object
+my $engine = Zonemaster::Backend::RPCAPI->new(
+    {
+        db     => 'Zonemaster::Backend::DB::SQLite',
+        config => $config,
+    }
+);
+isa_ok( $engine, 'Zonemaster::Backend::RPCAPI' );
 
 # create a new memory SQLite database
 ok( $engine->{db}->create_db() );
@@ -33,10 +41,9 @@ my $frontend_params_1 = {
     client_id      => 'Unit Test',         # free string
     client_version => '1.0',               # free version like string
     domain         => 'afnic.fr',          # content of the domain text field
-    advanced       => 1,                   # 0 or 1, is the advanced options checkbox checked
-    ipv4           => 1,                   # 0 or 1, is the ipv4 checkbox checked
-    ipv6           => 1,                   # 0 or 1, is the ipv6 checkbox checked
-    profile        => 'default_profile',    # the id if the Test profile listbox
+    ipv4           => JSON::PP::true,                   # 0 or 1, is the ipv4 checkbox checked
+    ipv6           => JSON::PP::true,                   # 0 or 1, is the ipv6 checkbox checked
+    profile        => 'default',    # the id if the Test profile listbox
 
     nameservers => [                       # list of the nameserves up to 32
         { ns => 'ns1.nic.fr' },       # key values pairs representing nameserver => namesterver_ip
@@ -56,8 +63,17 @@ sub run_zonemaster_test_with_backend_API {
 	# test test_progress API
 	ok( $engine->test_progress( $test_id ) == 0 );
 
-	use_ok( 'Zonemaster::WebBackend::Runner' );
-	Zonemaster::WebBackend::Runner->new( { db => "Zonemaster::WebBackend::DB::SQLite" } )->run( $test_id );
+	use_ok( 'Zonemaster::Backend::Config' );
+
+	use_ok( 'Zonemaster::Backend::TestAgent' );
+
+	if ( not $ENV{ZONEMASTER_RECORD} ) {
+		Zonemaster::Engine->preload_cache( $datafile );
+		Zonemaster::Engine->profile->set( q{no_network}, 1 );
+	}
+	Zonemaster::Backend::TestAgent->new( { db => "Zonemaster::Backend::DB::SQLite", config => $config } )->run( $test_id );
+
+	Zonemaster::Backend::TestAgent->reset() unless ( $ENV{ZONEMASTER_RECORD} );
 
 	ok( $engine->test_progress( $test_id ) > 0 );
 
@@ -73,15 +89,15 @@ sub run_zonemaster_test_with_backend_API {
 	ok( defined $test_results->{results},            'TEST1 $test_results->{results} defined' );
 	ok( scalar( @{ $test_results->{results} } ) > 1, 'TEST1 got some results' );
 
-	if ( $ENV{ZONEMASTER_RECORD} ) {
-		Zonemaster->save_cache( $datafile );
-	}
 }
 
 run_zonemaster_test_with_backend_API(1);
 $frontend_params_1->{ipv6} = 0;
 run_zonemaster_test_with_backend_API(2);
 
+if ( $ENV{ZONEMASTER_RECORD} ) {
+	Zonemaster::Engine->save_cache( $datafile );
+}
 done_testing();
 
 my $dbfile = 'zonemaster';

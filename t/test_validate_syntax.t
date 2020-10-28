@@ -8,12 +8,17 @@ use Test::More;    # see done_testing()
 
 my $can_use_threads = eval 'use threads; 1';
 
-# Require Zonemaster::WebBackend::Engine.pm test
-use_ok( 'Zonemaster::WebBackend::Engine' );
+# Require Zonemaster::Backend::RPCAPI.pm test
+use_ok( 'Zonemaster::Backend::RPCAPI' );
 
-# Create Zonemaster::WebBackend::Engine object
-my $engine = Zonemaster::WebBackend::Engine->new( { db => 'Zonemaster::WebBackend::DB::SQLite' } );
-isa_ok( $engine, 'Zonemaster::WebBackend::Engine' );
+# Create Zonemaster::Backend::RPCAPI object
+my $engine = Zonemaster::Backend::RPCAPI->new(
+    {
+        db     => 'Zonemaster::Backend::DB::SQLite',
+        config => Zonemaster::Backend::Config->load_config(),
+    }
+);
+isa_ok( $engine, 'Zonemaster::Backend::RPCAPI' );
 
 my $frontend_params = {
 	ipv4 => 1,
@@ -70,7 +75,7 @@ ok( $engine->validate_syntax( $frontend_params )->{status} eq 'ok',
 	or diag( $engine->validate_syntax( $frontend_params )->{message} );
 
 # 64 characters long domain label
-$frontend_params->{domain} = '012345678901234567890123456789012345678901234567890123456789-64-.fr';
+$frontend_params->{domain} = '012345678901234567890123456789012345678901234567890123456789--64.fr';
 ok( $engine->validate_syntax( $frontend_params )->{status} eq 'nok',
 	encode_utf8( '64 characters long domain label' ) )
 	or diag( $engine->validate_syntax( $frontend_params )->{message} );
