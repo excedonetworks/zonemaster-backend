@@ -12,7 +12,7 @@ use Proc::ProcessTable;
 
 local $| = 1;
 
-use Zonemaster::WebBackend::Config;
+use Zonemaster::Backend::Config;
 
 use FindBin qw($RealScript $Script $RealBin $Bin);
 FindBin::again();
@@ -40,15 +40,15 @@ unshift(@INC, $PROJECT_BASE_DIR);
 ###################################################################
 
 my $JOB_RUNNER_DIR = $PROD_DIR."zonemaster-backend/script/crontab_job_runner/";
-my $LOG_DIR = Zonemaster::WebBackend::Config->LogDir();
-my $perl_command = Zonemaster::WebBackend::Config->PerlIntereter();
-my $polling_interval = Zonemaster::WebBackend::Config->PollingInterval();
-my $zonemaster_timeout_interval = Zonemaster::WebBackend::Config->MaxZonemasterExecutionTime();
-my $frontend_slots = Zonemaster::WebBackend::Config->NumberOfProcessesForFrontendTesting();
-my $batch_slots = Zonemaster::WebBackend::Config->NumberOfProcessesForBatchTesting();
+my $LOG_DIR = Zonemaster::Backend::Config->load_config()->LogDir();
+my $perl_command = Zonemaster::Backend::Config->load_config()->PerlInterpreter();
+my $polling_interval = Zonemaster::Backend::Config->load_config()->PollingInterval();
+my $zonemaster_timeout_interval = Zonemaster::Backend::Config->load_config()->MaxZonemasterExecutionTime();
+my $frontend_slots = Zonemaster::Backend::Config->load_config()->NumberOfProcessesForFrontendTesting();
+my $batch_slots = Zonemaster::Backend::Config->load_config()->NumberOfProcessesForBatchTesting();
 
-my $connection_string = Zonemaster::WebBackend::Config->DB_connection_string();
-my $dbh = DBI->connect($connection_string, Zonemaster::WebBackend::Config->DB_user(), Zonemaster::WebBackend::Config->DB_password(), {RaiseError => 1, AutoCommit => 1});
+my $connection_string = Zonemaster::Backend::Config->load_config()->DB_connection_string();
+my $dbh = DBI->connect($connection_string, Zonemaster::Backend::Config->load_config()->DB_user(), Zonemaster::Backend::Config->load_config()->DB_password(), {RaiseError => 1, AutoCommit => 1});
 
 
 sub clean_hung_processes {

@@ -6,12 +6,12 @@ use Encode;
 
 use DBI qw(:utils);
 
-use Zonemaster::WebBackend::Config;
+use Zonemaster::Backend::Config;
 
-die "The configuration file does not contain the PostgreSQL backend" unless (lc(Zonemaster::WebBackend::Config->BackendDBType()) eq 'postgresql');
-my $db_user = Zonemaster::WebBackend::Config->DB_user();
-my $db_password = Zonemaster::WebBackend::Config->DB_password();
-my $connection_string = Zonemaster::WebBackend::Config->DB_connection_string();
+die "The configuration file does not contain the PostgreSQL backend" unless (lc(Zonemaster::Backend::Config->load_config()->BackendDBType()) eq 'postgresql');
+my $db_user = Zonemaster::Backend::Config->load_config()->DB_user();
+my $db_password = Zonemaster::Backend::Config->load_config()->DB_password();
+my $connection_string = Zonemaster::Backend::Config->load_config()->DB_connection_string();
 
 my $dbh = DBI->connect( $connection_string, $db_user, $db_password, { RaiseError => 1, AutoCommit => 1 } );
 
@@ -50,22 +50,26 @@ sub create_db {
                         progress integer DEFAULT 0,
                         params_deterministic_hash character varying(32),
                         params json NOT NULL,
-                        results json DEFAULT NULL
+                        results json DEFAULT NULL,
+                        nb_retries integer NOT NULL DEFAULT 0
                 )
         '
     );
 
     $dbh->do(
-		'CREATE INDEX test_results__hash_id ON test_results (hash_id)'
+        'CREATE INDEX test_results__hash_id ON test_results (hash_id)'
     );
     
     $dbh->do(
-		'CREATE INDEX test_results__params_deterministic_hash ON test_results (params_deterministic_hash)'
+        'CREATE INDEX test_results__params_deterministic_hash ON test_results (params_deterministic_hash)'
     );
 
     $dbh->do(
-		'CREATE INDEX test_results__batch_id_progress ON test_results (batch_id, progress)'
+        'CREATE INDEX test_results__batch_id_progress ON test_results (batch_id, progress)'
     );
+    
+    $dbh->do( "CREATE INDEX test_results__domain_undelegated ON test_results ((params->>'domain'), (params->>'undelegated'))" );
+
     
     $dbh->do( "ALTER TABLE test_results OWNER TO $db_user" );
 
